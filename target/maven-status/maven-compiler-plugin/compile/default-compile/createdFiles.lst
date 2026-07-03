@@ -1,0 +1,14 @@
+org/matsim/contrib/bicycle/network/CreateBicycleNetworkWithElevation.class
+org/matsim/project/BicycleModeFilteredModule$1.class
+org/matsim/project/RunBicycleExample$MyAdditionalBicycleLinkScore.class
+org/matsim/project/RunBicycleExample$1.class
+org/matsim/gui/MATSimGUI.class
+org/matsim/project/RunMatsimFromExamplesUtils.class
+org/matsim/contrib/bicycle/network/BicycleOsmNetworkReaderV2.class
+org/matsim/project/RunBicycleExample.class
+org/matsim/project/BicycleModeFilteredModule$ConsistencyCheck.class
+org/matsim/project/BicycleModeFilteredScoreEventsCreator.class
+org/matsim/gui/package-info.class
+org/matsim/project/RunMatsim.class
+org/matsim/project/RunMatsimApplication.class
+org/matsim/project/BicycleModeFilteredModule.class

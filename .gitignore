@@ -1,0 +1,8 @@
+output/
+Eskilstuna/
+*.xml
+*.jar
+*.log
+*.csv
+*.png
+simulation.out
