@@ -1,0 +1,459 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE config SYSTEM "http://www.matsim.org/files/dtd/config_v2.dtd">
+
+<!-- 
+    MATSim Configuration for Eskilstuna Bicycle Model
+    ==================================================
+    
+    TARGET MODE SPLIT (Real-world Eskilstuna):
+    - Car: ~70%
+    - Bicycle: ~10%
+    - Walk: ~10%
+    - Transit: ~10%
+    
+    KEY FEATURES:
+    1. SubtourModeChoice strategy ENABLED - allows agents to switch between modes
+    2. Mode parameters calibrated for realistic Swedish mode shares
+    3. Bicycle contrib integration - infrastructure, comfort, gradient scoring
+    4. Network modes: car, bicycle, walk
+    5. Teleported mode: transit only
+    
+    POPULATION FILE: population_scaper_02.xml
+    - Modes used: car, bicycle, walk
+    - Activity types: home, work, other, shop
+    
+    USAGE:
+    - Run with: java -cp matsim-example-project-0.0.1-SNAPSHOT.jar 
+                org.matsim.project.RunBicycleExample Eskilstuna/config_bicycle_modechoice.xml
+-->
+
+<config>
+
+    <!-- ============================================== -->
+    <!-- GLOBAL SETTINGS                                -->
+    <!-- ============================================== -->
+    <module name="global">
+        <param name="coordinateSystem" value="EPSG:3006"/>
+        <!-- 
+            numberOfThreads: Used for Scoring, Replanning, and Routing
+            Set to number of available CPU cores for best performance.
+            For Linux: use `nproc` command to find available cores.
+        -->
+        <param name="numberOfThreads" value="6"/>
+        <param name="randomSeed" value="4711"/>
+    </module>
+
+    <!-- ============================================== -->
+    <!-- NETWORK - Use FIXED network with interpolated elevation -->
+    <!-- (Original bike_acc_3006_box_V2.xml had 25.7% nodes with z=3.4E38) -->
+    <!-- ============================================== -->
+    <module name="network">
+        <param name="inputNetworkFile" value="network_box_accessibility_1.xml"/>
+    </module>
+
+    <!-- ============================================== -->
+    <!-- POPULATION / PLANS                            -->
+    <!-- ============================================== -->
+    <module name="plans">
+        <param name="inputPlansFile" value="population_260213_consistent_1pct.xml"/>
+        <param name="removingUnnecessaryPlanAttributes" value="true"/>
+    </module>
+
+    <!-- ============================================== -->
+    <!-- CONTROLLER - Simulation control               -->
+    <!-- ============================================== -->
+    <module name="controller">
+        <param name="outputDirectory" value="./output"/>
+        <param name="firstIteration" value="0"/>
+        <param name="lastIteration" value="100"/>
+        <param name="createGraphsInterval" value="1"/>
+        <param name="runId" value="eskilstuna_modechoice"/>
+        
+        <!-- Write output every 5 iterations to track progress -->
+        <param name="writeEventsInterval" value="100"/>
+        <param name="writePlansInterval" value="100"/>
+        <param name="writeSnapshotsInterval" value="-1"/>   <!-- 0 -->
+        <param name="writeTripsInterval" value="100"/>
+        
+        <!-- Generate score/mode-share graphs every iteration -->
+        
+        <!-- 
+            IMPORTANT: MATSim always writes some output for early iterations regardless of interval!
+            - writePlansUntilIteration: Always write plans up to this iteration (default=1)
+            - writeEventsUntilIteration: Always write events up to this iteration (default=0)
+            Set these to 0 to disable early iteration writing (use -1 to completely skip)
+        -->
+        <!-- These are not directly settable in XML - must be set in Java code -->
+        
+        <!-- Overwrite existing output -->
+        <param name="overwriteFiles" value="deleteDirectoryIfExists"/>
+        
+        <!-- Snapshot format for VIA visualization -->
+        <param name="snapshotFormat" value=""/>
+    </module>
+
+    <!-- ============================================== -->
+    <!-- QSIM - Traffic flow simulation                -->
+    <!-- ============================================== -->
+    <!-- 
+        NETWORK MODES: car, bicycle, walk
+        TELEPORTED MODE: transit (not simulated on network)
+    -->
+    <module name="qsim">
+        <param name="startTime" value="00:00:00"/>
+        <param name="endTime" value="24:00:00"/>
+        
+        <!-- Main modes that use network links: car, bicycle, walk -->
+        <param name="mainMode" value="car,bicycle"/>
+        
+        <!-- Capacity scaling (1.0 = 100% sample) -->
+        <param name="flowCapacityFactor" value="1.0"/>
+        <param name="storageCapacityFactor" value="1.0"/>
+        
+        <!-- Stuck agent handling -->
+        <param name="stuckTime" value="10"/>
+        <param name="removeStuckVehicles" value="true"/>
+        
+        <!-- Vehicle behavior -->
+        <param name="vehiclesSource" value="modeVehicleTypesFromVehiclesData"/>
+        <param name="linkDynamics" value="FIFO"/>
+        <param name="trafficDynamics" value="queue"/>
+        
+        <!-- 
+            QSim threads: Controls parallel traffic simulation
+            IMPORTANT: MATSim QSim scales up to ~8 threads maximum!
+            Setting more than 8 provides NO benefit and may reduce performance.
+            For medium scenarios (10k-100k agents), use 4-8 threads.
+        -->
+        <param name="numberOfThreads" value="6"/>
+    </module>
+
+    <!-- ============================================== -->
+    <!-- VEHICLES - Define vehicle types               -->
+    <!-- ============================================== -->
+    <module name="vehicles">
+        <param name="vehiclesFile" value="null"/>
+    </module>
+
+    <!-- ============================================== -->
+    <!-- ROUTING - How routes are calculated           -->
+    <!-- ============================================== -->
+    <module name="routing">
+        <!-- Routing algorithm -->
+        <param name="routingRandomness" value="3.0"/>
+        
+        <!-- Access/Egress to activities -->
+        <param name="accessEgressType" value="accessEgressModeToLink"/>
+        
+        <!-- TELEPORTED MODE: Transit only (not on network) -->
+        <parameterset type="teleportedModeParameters">
+            <param name="mode" value="transit"/>
+            <param name="teleportedModeSpeed" value="4.16"/>  <!-- 15 km/h (was 8.33=30km/h) -->
+            <param name="beelineDistanceFactor" value="1.8"/>  <!-- More detour (was 1.5) -->
+        </parameterset>
+        
+        <parameterset type="teleportedModeParameters">
+            <param name="mode" value="pt"/>
+            <param name="teleportedModeSpeed" value="4.16"/>  <!-- 15 km/h (was 8.33=30km/h) -->
+            <param name="beelineDistanceFactor" value="1.8"/>
+        </parameterset>
+        
+        <!-- TELEPORTED MODE: Walk (cannot be network mode in standard MATSim) -->
+        <parameterset type="teleportedModeParameters">
+            <param name="mode" value="walk"/>
+            <param name="teleportedModeSpeed" value="2"/>  <!-- ~3.6 km/h walking speed -->
+            <param name="beelineDistanceFactor" value="1.2"/>
+        </parameterset>
+    </module>
+
+    <!-- ============================================== -->
+    <!-- SCORING - Plan/Mode scoring (CRITICAL!)       -->
+    <!-- ============================================== -->
+    <!-- 
+        TARGET MODE SPLIT:
+        - Car: ~70% (dominant mode in Eskilstuna)
+        - Bicycle: ~10%
+        - Walk: ~10%
+        - Transit: ~10%
+        
+        CALIBRATION LOGIC:
+        - Car has positive constant (most attractive baseline)
+        - Other modes have negative constants relative to car
+        - The difference in constants drives mode choice
+    -->
+    <module name="scoring">
+        <!-- Learning parameters -->
+        <param name="learningRate" value="1.0"/>
+        <param name="BrainExpBeta" value="1.0"/>
+        
+        <!-- Time-related penalties -->
+        <param name="lateArrival" value="-18"/>
+        <param name="earlyDeparture" value="0"/>
+        <param name="performing" value="6"/>
+        <param name="waiting" value="0"/>
+        <param name="waitingPt" value="-2"/>
+        <param name="writeExperiencedPlans" value="true"/>
+
+        <!-- Marginal utility of money (for monetary costs) -->
+        <param name="marginalUtilityOfMoney" value="1"/>
+        
+        <!-- ========== ACTIVITY PARAMETERS ========== -->
+        <!-- Only activities that exist in population_scaper_02.xml: home, work, shop, other -->
+        
+        <parameterset type="activityParams">
+            <param name="activityType" value="home"/>
+            <param name="typicalDuration" value="12:00:00"/>
+            <param name="priority" value="1"/>
+        </parameterset>
+        
+        <parameterset type="activityParams">
+            <param name="activityType" value="work"/>
+            <param name="typicalDuration" value="08:00:00"/>
+            <param name="openingTime" value="06:00:00"/>
+            <param name="closingTime" value="24:00:00"/>
+            <param name="priority" value="1"/>
+        </parameterset>
+        
+        <parameterset type="activityParams">
+            <param name="activityType" value="shop"/>
+            <param name="typicalDuration" value="01:00:00"/>
+            <param name="openingTime" value="08:00:00"/>
+            <param name="closingTime" value="22:00:00"/>
+            <param name="priority" value="1"/>
+        </parameterset>
+        
+        <parameterset type="activityParams">
+            <param name="activityType" value="other"/>
+            <param name="typicalDuration" value="01:00:00"/>
+            <param name="priority" value="1"/>
+        </parameterset>
+        
+        <!-- ========== MODE PARAMETERS (Calibrated for ~70% car) ========== -->
+<param name="writeExperiencedPlans" value="true"/>        <!-- 
+            CALIBRATION STRATEGY:
+            - Car should be dominant (~70%) so needs HIGH positive constant
+            - Walk/Transit are teleported modes (very fast) so need HIGH penalties
+            - Bicycle is network mode but should be ~10%
+            
+            ISSUE: Walk/transit are teleported at beeline distances, making them
+            artificially faster than network modes. Need large constants to compensate.
+        -->
+        
+        <!-- 
+            CAR - Dominant mode (~70% target)
+            - HIGH positive constant: Make car the baseline attractive option
+            - Moderate travel time penalty
+        -->
+        <parameterset type="modeParams">
+            <param name="mode" value="car"/>
+            <param name="constant" value="3"/>  <!-- DOUBLED from 4.0/ 8 -->
+            <param name="marginalUtilityOfTraveling_util_hr" value="-6.0"/> <!-- -6.0 -->
+            <param name="marginalUtilityOfDistance_util_m" value="0"/>
+            <param name="monetaryDistanceRate" value="-1E-4"/>  <!-- Reduced cost further -->
+        </parameterset>
+        
+        <!-- 
+            BICYCLE - Minor mode (~10% target)
+            - Slightly negative constant relative to car
+        -->
+        <parameterset type="modeParams">
+            <param name="mode" value="bicycle"/>  
+            <param name="constant" value="-1"/>  <!-- Slightly negative (was 0.0)/ -2 -->
+            <param name="marginalUtilityOfTraveling_util_hr" value="-12.0"/>
+            <param name="marginalUtilityOfDistance_util_m" value="-2E-3"/>
+            <param name="monetaryDistanceRate" value="0.0"/>
+        </parameterset>
+        
+        <!-- 
+            WALK - Minor mode (~10% target)
+            - HIGH negative constant: Teleported mode is too fast, penalize heavily
+            - Only attractive for VERY short trip
+        -->
+        <parameterset type="modeParams">
+            <param name="mode" value="walk"/>
+            <param name="constant" value="0.0"/>  <!-- VERY negative: was -6.0 / -15-->
+            <param name="marginalUtilityOfTraveling_util_hr" value="-6.0"/>  <!-- Harsher: was -18 -->
+            <param name="marginalUtilityOfDistance_util_m" value="-2E-3"/>
+            <param name="monetaryDistanceRate" value="0.0"/>
+        </parameterset>
+        
+        <!-- 
+            TRANSIT - Minor mode (~10% target, teleported)
+            - HIGH negative constant: Teleported at 30km/h is unrealistically fast
+            - Need to penalize to represent waiting, transfers, discomfort
+        -->
+        <parameterset type="modeParams">
+            <param name="mode" value="transit"/>
+            <param name="constant" value="-3"/>  <!-- VERY negative: was -5.0/ -12 -->
+            <param name="marginalUtilityOfTraveling_util_hr" value="-6.0"/>  <!-- Harsher: was -8 -->
+            <param name="marginalUtilityOfDistance_util_m" value="-5E-4"/> <!-- 0 -->
+            <param name="monetaryDistanceRate" value="-5E-4"/>  <!-- Increased cost -->
+        </parameterset>
+        
+    </module>
+
+    <!-- ============================================== -->
+    <!-- STRATEGY - Replanning (CRITICAL FOR MODE CHOICE!) -->
+    <!-- ============================================== -->
+    <!-- 
+        THIS WAS THE PROBLEM IN YOUR LAST RUN!
+        
+        You only had ChangeExpBeta + ReRoute.
+        Without SubtourModeChoice, agents CANNOT switch modes!
+        
+        Strategy weights should sum to ~1.0:
+        - ChangeExpBeta (0.60): Select good plans, exploit learning
+        - SubtourModeChoice (0.25): TRY DIFFERENT MODES - the key!
+        - ReRoute (0.15): Find better routes for current mode
+    -->
+    <module name="replanning">
+        <!-- Maximum plans per agent (memory) -->
+        <param name="maxAgentPlanMemorySize" value="10"/>
+        
+        <!-- CRITICAL: Disable innovation in last 20% of iterations -->
+        <!-- This allows the model to converge to equilibrium -->
+        <param name="fractionOfIterationsToDisableInnovation" value="0.9"/>
+        
+        <!-- Strategy 1: ChangeExpBeta - Select plans probabilistically by score -->
+        <parameterset type="strategysettings">
+            <param name="strategyName" value="ChangeExpBeta"/>
+            <param name="weight" value="050"/>
+        </parameterset>
+        
+        <!-- Strategy 2: SubtourModeChoice - THE MISSING PIECE! -->
+        <!-- Allows agents to try different modes for their trips -->
+        <parameterset type="strategysettings">
+            <param name="strategyName" value="SubtourModeChoice"/>
+            <param name="weight" value="0.45"/>
+        </parameterset>
+        
+        <!-- Strategy 3: ReRoute - Find better routes -->
+        <parameterset type="strategysettings">
+            <param name="strategyName" value="ReRoute"/>
+            <param name="weight" value="0.05"/>
+        </parameterset>
+    </module>
+
+    <!-- ============================================== -->
+    <!-- SUBTOUR MODE CHOICE - Mode switching config   -->
+    <!-- ============================================== -->
+    <!-- 
+        This module controls HOW agents switch modes.
+        
+        IMPORTANT CONCEPTS:
+        - Subtour: A round-trip (home -> activities -> home)
+        - Chain-based modes: Require vehicle at trip start (car, bicycle)
+        - Non-chain modes: Can be used anywhere (walk, transit)
+    -->
+    <module name="subtourModeChoice">
+        <!-- Modes available for choice -->
+        <param name="modes" value="car,bicycle,walk,transit"/>
+        
+        <!-- Chain-based: Agent must have vehicle at origin -->
+        <!-- If you bike to work, you must bike back (vehicle is there) -->
+        <param name="chainBasedModes" value="car,bicycle"/>
+        
+        <!-- Consider car availability per agent -->
+        <param name="considerCarAvailability" value="true"/>
+        
+        <!-- Behavior when stuck: random (try any mode) vs bestResponse -->
+        <param name="behavior" value="fromSpecifiedModesToSpecifiedModes"/>
+        
+        <!-- Allow single-leg subtours (one trip = one subtour) -->
+        <param name="probaForRandomSingleTripMode" value="0.0"/>
+    </module>
+
+    <!-- ============================================== -->
+    <!-- CHANGE MODE (Legacy - backup mode changer)    -->
+    <!-- ============================================== -->
+    <module name="changeMode">
+        <param name="modes" value="car, bike, transit, walk"/>
+        <param name="ignoreCarAvailability" value="false"/>
+    </module>
+
+    <!-- ============================================== -->
+    <!-- BICYCLE CONTRIB - Bicycle-specific scoring    -->
+    <!-- ============================================== -->
+    <!-- 
+        These parameters make bicycle routing sensitive to:
+        - Infrastructure type (bike lanes vs roads)
+        - Surface comfort (asphalt vs cobblestone)
+        - Gradient/hills (uphill penalty)
+        - Accessibility attributes (custom network attributes)
+    -->
+    <module name="bicycle">
+        <!-- Enable the bicycle module -->
+        <param name="bicycleMode" value="bicycle"/>
+        
+        <!-- Maximum speed for routing (m/s) - 20 km/h  -->
+        <param name="maxBicycleSpeedForRouting" value="5"/>
+        
+        <!-- Infrastructure utility: Preference for bike lanes -->
+        <!-- Negative = penalty for bad infrastructure -->
+        <param name="marginalUtilityOfInfrastructure_m" value="0"/>
+        
+        <!-- Comfort utility: Surface quality preference -->
+        <param name="marginalUtilityOfComfort_m" value="0"/>
+        
+        <!-- Gradient utility: Uphill penalty per 100m elevation gain -->
+        <param name="marginalUtilityOfGradient_m_100m" value="-0.15"/>
+        
+        <!-- Custom network attribute scoring -->
+        <!-- CRITICAL: These values were causing -10^36 scores! -->
+        <!-- If network has no accessibility attribute on links, the default value is used -->
+        <!-- With default=0.0 and marginalUtility=-1.0, every meter costs -1.0 utility! -->
+        <param name="marginalUtilityOfUserDefinedNetworkAttribute_m" value="-0.08"/>
+        <param name="userDefinedNetworkAttributeName" value="accessibility"/>
+        <param name="userDefinedNetworkAttributeDefaultValue" value="0.5"/>
+    </module>
+
+    <!-- ============================================== -->
+    <!-- TRANSIT (if using transit simulation)         -->
+    <!-- ============================================== -->
+    <module name="transit">
+        <param name="useTransit" value="false"/>
+        <!-- Set to true and provide schedule if you have PT data -->
+        <!-- <param name="transitScheduleFile" value="transitSchedule.xml"/> -->
+        <!-- <param name="vehiclesFile" value="transitVehicles.xml"/> -->
+    </module>
+
+    <!-- ============================================== -->
+    <!-- TIME ALLOCATION MUTATOR (optional)            -->
+    <!-- ============================================== -->
+    <module name="timeAllocationMutator">
+        <param name="mutationRange" value="7200"/>
+        <param name="mutationAffectsDuration" value="true"/>
+    </module>
+
+    <!-- ============================================== -->
+    <!-- PARALLEL EVENT HANDLING                       -->
+    <!-- ============================================== -->
+    <!-- 
+        CRITICAL FOR MULTI-THREADING!
+        This module controls parallel processing of simulation events.
+        Without this, event handling is single-threaded even if QSim 
+        has multiple threads configured.
+    -->
+    <module name="parallelEventHandling">
+        <!-- Number of threads for event handling (match qsim.numberOfThreads) -->
+        <param name="numberOfThreads" value="4"/>
+        
+        <!-- Synchronize events at each simulation time step (recommended for consistency) -->
+        <param name="synchronizeOnSimSteps" value="true"/>
+        
+        <!-- 
+            oneThreadPerHandler: Experimental feature that gives each event handler its own thread.
+            Set to false for stability.
+        -->
+        <param name="oneThreadPerHandler" value="false"/>
+    </module>
+
+    <!-- ============================================== -->
+    <!-- LINK STATS - Control link statistics output   -->
+    <!-- ============================================== -->
+    <module name="linkStats">
+        <param name="writeLinkStatsInterval" value="-1"/>
+        <param name="averageLinkStatsOverIterations" value="-1"/>
+    </module>
+
+</config>
